@@ -33,14 +33,16 @@ jobs:
         find original -type d | sed 's|^original/||' | xargs -I {} mkdir -p {}
         echo "ディレクトリ構造を'original'から親ディレクトリにコピーしました"
 
-    # HTMLファイルのミニファイ化
-    - name: HTMLファイルのミニファイ化
-      run: |
-        find original -type f -name "*.html" | while read file; do
-          output_file="${file#original/}"
-          echo "ファイル $file をミニファイ化し、$output_file に出力します"
-          html-minifier-terser "$file" -o "$output_file" --collapse-whitespace --remove-comments --minify-css true --minify-js true || echo "HTMLミニファイ化失敗: $file"
-        done
+- name: HTMLファイルのミニファイ化
+  run: |
+    echo "ミニファイ化の対象ファイル一覧:"
+    find original -type f -name "*.html"
+    
+    find original -type f -name "*.html" | while read file; do
+      output_file="${file#original/}"
+      echo "ファイル $file をミニファイ化し、$output_file に出力します"
+      html-minifier-terser "$file" -o "$output_file" --collapse-whitespace --remove-comments --minify-css true --minify-js true || echo "HTMLミニファイ化失敗: $file"
+    done
 
     # CSSファイルのミニファイ化
     - name: CSSファイルのミニファイ化

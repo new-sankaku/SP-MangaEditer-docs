@@ -4,98 +4,59 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-    # リポジトリをチェックアウト
     - uses: actions/checkout@v2
-    # Node.jsをインストール
     - name: Node.jsのインストール
       uses: actions/setup-node@v2
       with:
         node-version: '14'
-    # 必要な依存関係をインストール
     - name: 依存関係のインストール
       run: |
         npm install -g html-minifier-terser
         npm install -g clean-css-cli
         npm install -g terser
-    # 親ディレクトリのクリア（'original'フォルダ以外を削除）
-    - name: 親ディレクトリのクリア
+    - name: originalフォルダの親フォルダを削除
       run: |
         shopt -s extglob
         rm -rf !(original)
-        echo "親ディレクトリをクリアしました（'original'フォルダを除く）"
-    # ディレクトリ構造のコピー
-    - name: ディレクトリ構造のコピー
+        echo "originalフォルダ以外の親フォルダを削除しました"
+    - name: originalフォルダのディレクトリ構成を親フォルダにコピー
       run: |
         find original -type d | sed 's|^original/||' | xargs -I {} mkdir -p {}
-        echo "ディレクトリ構造を'original'から親ディレクトリにコピーしました"
-    # HTMLファイルのミニファイ化
+        echo "ディレクトリ構造をoriginalから親フォルダにコピーしました"
+    - name: originalフォルダのディレクトリ構成をoriginal_tempフォルダにコピー
+      run: |
+        cp -R original original_temp
+        echo "ディレクトリ構造をoriginal_tempフォルダにコピーしました"
     - name: HTMLファイルのミニファイ化
       run: |
-        echo "ミニファイ化の対象HTMLファイル一覧:"
-        find original -type f -name "*.html"
-        
-        set -x
         find original -type f -name "*.html" | while read file; do
-          output_file="${file#original/}"
-          echo "処理中: $file -> $output_file"
+          output_file="${file/original/original_temp}"
           html-minifier-terser "$file" -o "$output_file" --collapse-whitespace --remove-comments --minify-css true --minify-js true
-          if [ $? -ne 0 ]; then
-            echo "エラー: HTMLミニファイ化失敗 - $file"
-          else
-            echo "成功: $file"
-          fi
         done
-        set +x
-    # CSSファイルのミニファイ化
     - name: CSSファイルのミニファイ化
       run: |
-        echo "ミニファイ化の対象CSSファイル一覧:"
-        find original -type f -name "*.css"
-        
-        set -x
         find original -type f -name "*.css" | while read file; do
-          output_file="${file#original/}"
-          echo "処理中: $file -> $output_file"
+          output_file="${file/original/original_temp}"
           cleancss -o "$output_file" "$file"
-          if [ $? -ne 0 ]; then
-            echo "エラー: CSSミニファイ化失敗 - $file"
-          else
-            echo "成功: $file"
-          fi
         done
-        set +x
-    # JSファイルのミニファイ化
     - name: JSファイルのミニファイ化
       run: |
-        echo "ミニファイ化の対象JSファイル一覧:"
-        find original -type f -name "*.js"
-        
-        set -x
         find original -type f -name "*.js" | while read file; do
-          output_file="${file#original/}"
-          echo "処理中: $file -> $output_file"
+          output_file="${file/original/original_temp}"
           terser "$file" -o "$output_file"
-          if [ $? -ne 0 ]; then
-            echo "エラー: JSミニファイ化失敗 - $file"
-          else
-            echo "成功: $file"
-          fi
         done
-        set +x
-    # ミニファイ化されていないファイルのコピー
-    - name: ミニファイ化されていないファイルのコピー
+    - name: original_tempの中身を表示
       run: |
-        find original -type f ! -name "*.html" ! -name "*.css" ! -name "*.js" | while read file; do
-          output_file="${file#original/}"
-          echo "ファイル $file をコピーして $output_file に保存します"
-          cp "$file" "$output_file" || echo "ファイルコピー失敗: $file"
-        done
-    # ルートディレクトリのファイル一覧表示
-    - name: ルートディレクトリのファイル一覧表示
+        echo "original_tempフォルダの内容:"
+        ls -R original_temp
+    - name: original_tempの中身を親フォルダにコピー
       run: |
-        echo "すべての操作が完了した後のルートディレクトリの内容:"
-        ls -R
-    # 変更をコミットしてプッシュ
+        cp -R original_temp/* .
+        echo "original_tempの中身を親フォルダにコピーしました"
+    - name: original_tempフォルダを削除
+      run: |
+        rm -rf original_temp
+        echo "original_tempフォルダを削除しました"
     - name: 変更をコミットしてプッシュ
       run: |
         git config --global user.name 'github-actions'

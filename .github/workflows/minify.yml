@@ -22,8 +22,10 @@ jobs:
 
     - name: Minify HTML files
       run: |
+        echo "ミニファイ化の対象ファイル一覧:"
+        find original -type f -name "*.html"
         echo "Starting HTML minification process"
-        find original -type f -name "*.html" | while read file; do
+        find original -type f -name "*.html" | while read -r file; do
           dir=$(dirname "${file#original/}")
           echo "Processing file: $file"
           echo "Target directory: $dir"

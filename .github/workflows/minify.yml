@@ -19,49 +19,77 @@ jobs:
         shopt -s extglob
         rm -rf !(original)
         echo "originalフォルダ以外の親フォルダを削除しました"
-    - name: originalフォルダのディレクトリ構成を親フォルダにコピー
+    - name: originalフォルダのディレクトリ構成を親フォルダとoriginal_tempフォルダにコピー
       run: |
-        find original -type d | sed 's|^original/||' | xargs -I {} mkdir -p {}
-        echo "ディレクトリ構造をoriginalから親フォルダにコピーしました"
-    - name: originalフォルダのディレクトリ構成をoriginal_tempフォルダにコピー
+        find original -type d | sed 's|^original/||' | xargs -I {} mkdir -p {} original_temp/{}
+        echo "ディレクトリ構造をoriginalから親フォルダとoriginal_tempフォルダにコピーしました"
+    - name: ファイルのミニファイ化
       run: |
-        cp -R original original_temp
-        echo "ディレクトリ構造をoriginal_tempフォルダにコピーしました"
-    - name: HTMLファイルのミニファイ化
-      run: |
-        find original -type f -name "*.html" | while read file; do
-          output_file="${file/original/original_temp}"
-          html-minifier-terser "$file" -o "$output_file" --collapse-whitespace --remove-comments --minify-css true --minify-js true
+        process_file() {
+          local file=$1
+          local type=$2
+          local output_file="${file/original/original_temp}"
+          echo "処理中: $file -> $output_file"
+          case $type in
+            html)
+              html-minifier-terser "$file" -o "$output_file" --collapse-whitespace --remove-comments --minify-css true --minify-js true
+              ;;
+            css)
+              cleancss -o "$output_file" "$file"
+              ;;
+            js)
+              terser "$file" -o "$output_file"
+              ;;
+          esac
+          if [ $? -ne 0 ]; then
+            echo "エラー: ${type}ファイルのミニファイ化に失敗しました - $file"
+            return 1
+          else
+            echo "成功: $file をミニファイ化しました"
+          fi
+        }
+
+        echo "ミニファイ化を開始します..."
+        
+        find original -type f \( -name "*.html" -o -name "*.css" -o -name "*.js" \) | while read file; do
+          ext="${file##*.}"
+          if ! process_file "$file" "$ext"; then
+            echo "警告: $file の処理中にエラーが発生しました"
+          fi
         done
-    - name: CSSファイルのミニファイ化
+
+        echo "ミニファイ化が完了しました"
+    - name: ミニファイ化されていないファイルのコピー
       run: |
-        find original -type f -name "*.css" | while read file; do
+        echo "ミニファイ化対象外のファイルをコピーします..."
+        find original -type f ! \( -name "*.html" -o -name "*.css" -o -name "*.js" \) | while read file; do
           output_file="${file/original/original_temp}"
-          cleancss -o "$output_file" "$file"
+          echo "コピー中: $file -> $output_file"
+          cp "$file" "$output_file" || echo "エラー: ファイルのコピーに失敗しました - $file"
         done
-    - name: JSファイルのミニファイ化
-      run: |
-        find original -type f -name "*.js" | while read file; do
-          output_file="${file/original/original_temp}"
-          terser "$file" -o "$output_file"
-        done
+        echo "ファイルのコピーが完了しました"
     - name: original_tempの中身を表示
       run: |
         echo "original_tempフォルダの内容:"
-        ls -R original_temp
+        ls -lR original_temp
     - name: original_tempの中身を親フォルダにコピー
       run: |
-        cp -R original_temp/* .
-        echo "original_tempの中身を親フォルダにコピーしました"
+        echo "original_tempの中身を親フォルダにコピーします..."
+        cp -R original_temp/* . || echo "エラー: ファイルのコピーに失敗しました"
+        echo "コピーが完了しました"
     - name: original_tempフォルダを削除
       run: |
         rm -rf original_temp
         echo "original_tempフォルダを削除しました"
+    - name: 最終的なファイル構造の表示
+      run: |
+        echo "最終的なファイル構造:"
+        ls -lR
     - name: 変更をコミットしてプッシュ
       run: |
         git config --global user.name 'github-actions'
         git config --global user.email 'github-actions@github.com'
         git add .
-        git commit -m 'originalディレクトリからファイルをミニファイ化および再構築' || echo "コミットする変更はありません"
+        git diff --staged --quiet || git commit -m 'originalディレクトリからファイルをミニファイ化および再構築'
         git pull --rebase origin main
-        git push
+        git push || echo "警告: 変更のプッシュに失敗しました"

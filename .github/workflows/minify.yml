@@ -1,0 +1,86 @@
+name: Minify and Restructure
+on: [push]
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+    # リポジトリをチェックアウト
+    - uses: actions/checkout@v2
+
+    # Node.jsをインストール
+    - name: Node.jsのインストール
+      uses: actions/setup-node@v2
+      with:
+        node-version: '14'
+
+    # 必要な依存関係をインストール
+    - name: 依存関係のインストール
+      run: |
+        npm install -g html-minifier-terser
+        npm install -g clean-css-cli
+        npm install -g terser
+
+    # 親ディレクトリのクリア（'original'フォルダ以外を削除）
+    - name: 親ディレクトリのクリア
+      run: |
+        shopt -s extglob
+        rm -rf !(original)
+        echo "親ディレクトリをクリアしました（'original'フォルダを除く）"
+
+    # ディレクトリ構造のコピー
+    - name: ディレクトリ構造のコピー
+      run: |
+        find original -type d | sed 's|^original/||' | xargs -I {} mkdir -p {}
+        echo "ディレクトリ構造を'original'から親ディレクトリにコピーしました"
+
+    # HTMLファイルのミニファイ化
+    - name: HTMLファイルのミニファイ化
+      run: |
+        find original -type f -name "*.html" | while read file; do
+          output_file="${file#original/}"
+          echo "ファイル $file をミニファイ化し、$output_file に出力します"
+          html-minifier-terser "$file" -o "$output_file" --collapse-whitespace --remove-comments --minify-css true --minify-js true || echo "HTMLミニファイ化失敗: $file"
+        done
+
+    # CSSファイルのミニファイ化
+    - name: CSSファイルのミニファイ化
+      run: |
+        find original -type f -name "*.css" | while read file; do
+          output_file="${file#original/}"
+          echo "ファイル $file をミニファイ化し、$output_file に出力します"
+          cleancss -o "$output_file" "$file" || echo "CSSミニファイ化失敗: $file"
+        done
+
+    # JSファイルのミニファイ化
+    - name: JSファイルのミニファイ化
+      run: |
+        find original -type f -name "*.js" | while read file; do
+          output_file="${file#original/}"
+          echo "ファイル $file をミニファイ化し、$output_file に出力します"
+          terser "$file" -o "$output_file" || echo "JSミニファイ化失敗: $file"
+        done
+
+    # ミニファイ化されていないファイルのコピー
+    - name: ミニファイ化されていないファイルのコピー
+      run: |
+        find original -type f ! -name "*.html" ! -name "*.css" ! -name "*.js" | while read file; do
+          output_file="${file#original/}"
+          echo "ファイル $file をコピーして $output_file に保存します"
+          cp "$file" "$output_file" || echo "ファイルコピー失敗: $file"
+        done
+
+    # ルートディレクトリのファイル一覧表示
+    - name: ルートディレクトリのファイル一覧表示
+      run: |
+        echo "すべての操作が完了した後のルートディレクトリの内容:"
+        ls -R
+
+    # 変更をコミットしてプッシュ
+    - name: 変更をコミットしてプッシュ
+      run: |
+        git config --global user.name 'github-actions'
+        git config --global user.email 'github-actions@github.com'
+        git add .
+        git commit -m 'originalディレクトリからファイルをミニファイ化および再構築' || echo "コミットする変更はありません"
+        git pull --rebase origin main
+        git push
